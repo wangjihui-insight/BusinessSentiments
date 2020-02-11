@@ -1,3 +1,5 @@
+import sys
+import random
 from pyspark.sql import SparkSession
 import psycopg2
 from textblob import TextBlob
@@ -29,28 +31,37 @@ def store_result(result):
 
     cur = conn.cursor()
 
-    cur.execute("SELECT * FROM sentiments where word = '{}'".format(target))
+    target = result[0]
+    month = result[1]
+
+    cur.execute("SELECT * FROM sentiments where word = '{}' AND month = '{}'".format(target, month))
     entry = cur.fetchall()
 
     if not entry:
-         cur.execute("""INSERT INTO sentiments (word, count, positive, negative, neutral)
-                       VALUES ('{}', {}, {}, {}, {})""".format(result[0], result[1], result[2], result[3], result[4]))
+         cur.execute("""INSERT INTO sentiments (word, month, count, positive, negative, neutral)
+                       VALUES ('{}', {}, {}, {}, {}, {})""".format(result[0], result[1], result[2], result[3], result[4], result[5]))
     
 
-if __name__=="__main__":
+def main():
+
+    if len(sys.argv) < 3:
+        print("Usage: add keyword (string) and month (int) to the end.")
+
+    target = sys.argv[1]
+    month = sys.argv[2]
 
     spark = SparkSession\
         .builder\
         .appName("CommonCrawlPro")\
         .getOrCreate()
 
-    target = "nike"
 
     bucket = "s3://commoncrawl/"
-    segments = readfile("/home/hadoop/wet.paths")
+    segments = readfile("/home/hadoop/wet" + str(month) + ".paths")
+    samples = random.sample(range(0, len(segments)), 16)
     paths = []
-    for segment in segments:
-        paths.append(bucket+segment)
+    for i in samples:
+        paths.append(bucket+segments[i])
 
     path = ",".join(paths)
 
@@ -81,14 +92,12 @@ if __name__=="__main__":
         else:
             pos = item[1]
 
-    print("########################################")
-    print("Positive = {}, Negative = {}, Neutral = {}".format(pos, neg, neu))
-    print("########################################")
 
-    result = [target, pos+neg+neu, pos, neg, neu]
+    result = [target, month, pos+neg+neu, pos, neg, neu]
  
     store_result(result)
 
     spark.stop()
 
-
+if __name__=="__main__":
+    main()
